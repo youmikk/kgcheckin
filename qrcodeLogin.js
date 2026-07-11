@@ -1,4 +1,5 @@
 import { createRequire } from 'module'
+import fs from 'node:fs'
 import { close_api, delay, send, startService } from "./utils/utils.js";
 import { printGreen, printMagenta, printRed, printYellow } from "./utils/colorOut.js";
 import { summarizeResponse } from "./utils/safeLog.js";
@@ -8,19 +9,35 @@ const require = createRequire(import.meta.url)
 const QRCode = require('./api/node_modules/qrcode')
 
 /**
- * 在终端渲染二维码
+ * 显示二维码
+ * 在 GitHub Actions 中写入 Step Summary 以渲染真实图片；
+ * 在本地终端输出可扫码链接作为降级。
  * @param {string} url - 需要编码为二维码的 URL
  */
-async function printQrcode(url) {
-  try {
-    const qrTerminal = await QRCode.toString(url, {
-      type: 'terminal',
-      small: true,
-    })
-    console.log(qrTerminal)
-  } catch {
-    // 降级：输出 URL 供手动打开
-    printYellow(`二维码渲染失败，请手动打开此链接扫码：`)
+async function displayQrcode(url) {
+  // 生成 base64 PNG 图片
+  const dataUrl = await QRCode.toDataURL(url, { width: 256, margin: 2 })
+
+  // 写入 GitHub Actions Step Summary（运行摘要页面直接显示图片）
+  const stepSummary = process.env.GITHUB_STEP_SUMMARY
+  if (stepSummary) {
+    const content = [
+      '## 酷狗音乐扫码登录',
+      '',
+      `<img src="${dataUrl}" width="256" />`,
+      '',
+      '请使用 **酷狗音乐 APP** 扫描上方二维码登录',
+      '',
+      `如图片未显示，请复制此链接到浏览器打开扫码：`,
+      '',
+      url,
+      '',
+    ].join('\n')
+    fs.writeFileSync(stepSummary, content)
+    printGreen('二维码已显示在运行摘要页面（Summary）中')
+  } else {
+    // 本地运行降级：输出链接
+    printMagenta('请复制此链接到浏览器打开，使用酷狗音乐 APP 扫码登录：')
     console.log(url)
   }
 }
@@ -43,10 +60,7 @@ async function qrcode() {
       if (result.status === 1) {
         qrcode = result.data.qrcode
         const qrUrl = `https://h5.kugou.com/apps/loginQRCode/html/index.html?qrcode=${qrcode}`
-        printMagenta("请使用酷狗音乐 APP 扫描下方二维码登录")
-        await printQrcode(qrUrl)
-        printMagenta(`如二维码无法扫描，请复制此链接到浏览器打开：`)
-        printMagenta(qrUrl)
+        await displayQrcode(qrUrl)
       } else {
         printRed("响应内容")
         console.dir(summarizeResponse(result), { depth: null })

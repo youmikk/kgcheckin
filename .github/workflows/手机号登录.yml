@@ -1,20 +1,15 @@
-name: 账号登录
+name: 手机号登录
 on:
   workflow_dispatch:
     inputs:
-      login_method:
-        description: "登录方式"
+      step:
+        description: "操作步骤"
         required: true
         type: choice
-        default: "二维码登录"
+        default: "发送验证码"
         options:
-          - 二维码登录
           - 发送验证码
-          - 手机号登录
-      number:
-        description: "二维码登录：需要登录几个账号？"
-        required: false
-        default: "1"
+          - 登录
       append_user:
         description: "是否追加新账号？（不删除已存在账号信息）"
         required: true
@@ -36,7 +31,7 @@ permissions:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 2
     steps:
       - name: 检出仓库
         uses: actions/checkout@v6
@@ -47,7 +42,7 @@ jobs:
           cache: 'npm'
           cache-dependency-path: ./api/package-lock.json
       - name: 检查 GitHub CLI
-        if: github.event.inputs.login_method != '发送验证码'
+        if: github.event.inputs.step == '登录'
         run: |
           if ! command -v gh >/dev/null 2>&1; then
             curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
@@ -68,23 +63,13 @@ jobs:
       - name: 安装依赖
         run: npm run install
         if: ${{ steps.cache-npm.outputs.cache-hit != 'true' }}
-      - name: 二维码登录
-        if: github.event.inputs.login_method == '二维码登录'
-        run: npm run qrcodeLogin
-        env:
-          NUMBER: ${{ github.event.inputs.number }}
-          PAT: ${{ secrets.PAT }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          USERINFO: ${{ secrets.USERINFO }}
-          APPEND_USER: ${{ github.event.inputs.append_user }}
-          ALLOW_PRINT_USERINFO: ${{ github.event.inputs.print_userinfo }}
       - name: 发送验证码
-        if: github.event.inputs.login_method == '发送验证码'
+        if: github.event.inputs.step == '发送验证码'
         run: npm run sent
         env:
           PHONE: ${{ secrets.PHONE }}
       - name: 手机号登录
-        if: github.event.inputs.login_method == '手机号登录'
+        if: github.event.inputs.step == '登录'
         run: npm run phoneLogin
         env:
           PHONE: ${{ secrets.PHONE }}
