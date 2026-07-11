@@ -9,34 +9,65 @@ const require = createRequire(import.meta.url)
 const QRCode = require('./api/node_modules/qrcode')
 
 /**
+ * 渲染 QR 矩阵为纯 ASCII 文本（无 ANSI 转义码）
+ * 每个模块用双字符宽度，保证在等宽字体下比例正确
+ * @param {string} url - 需要编码为二维码的 URL
+ * @returns {string} ASCII 二维码文本
+ */
+function renderQrAscii(url) {
+  const qr = QRCode.create(url, { margin: 1 })
+  const size = qr.modules.size
+  const get = qr.modules.get
+  let ascii = ''
+  for (let r = 0; r < size; r++) {
+    let line = ''
+    for (let c = 0; c < size; c++) {
+      line += get(c, r) ? '██' : '  '
+    }
+    ascii += line + '\n'
+  }
+  return ascii
+}
+
+/**
  * 显示二维码
- * 在 GitHub Actions 中写入 Step Summary 以渲染真实图片；
- * 在本地终端输出可扫码链接作为降级。
+ * - GitHub Actions: 写入 Step Summary（ASCII 渲染） + 保存 PNG 供 artifact 下载
+ * - 本地终端: 直接输出 ASCII + 链接
  * @param {string} url - 需要编码为二维码的 URL
  */
 async function displayQrcode(url) {
-  // 生成 base64 PNG 图片
-  const dataUrl = await QRCode.toDataURL(url, { width: 256, margin: 2 })
+  const ascii = renderQrAscii(url)
 
-  // 写入 GitHub Actions Step Summary（运行摘要页面直接显示图片）
+  // 保存 PNG 文件，供 workflow 上传为 artifact
+  try {
+    await QRCode.toFile('./qr-code.png', url, { width: 256, margin: 2 })
+  } catch {
+    // PNG 保存失败不影响主流程
+  }
+
   const stepSummary = process.env.GITHUB_STEP_SUMMARY
   if (stepSummary) {
     const content = [
-      '## 酷狗音乐扫码登录',
+      '## 🎵 酷狗音乐扫码登录',
       '',
-      `<img src="${dataUrl}" width="256" />`,
+      '请使用 **酷狗音乐 APP** 扫描下方二维码登录',
       '',
-      '请使用 **酷狗音乐 APP** 扫描上方二维码登录',
+      '```',
+      ascii,
+      '```',
       '',
-      `如图片未显示，请复制此链接到浏览器打开扫码：`,
+      '> 如上方二维码无法扫描，可在下方 **Artifacts** 区域下载 `qr-code.png` 高清图片',
+      '',
+      '或复制此链接到浏览器打开扫码：',
       '',
       url,
       '',
     ].join('\n')
-    fs.writeFileSync(stepSummary, content)
-    printGreen('二维码已显示在运行摘要页面（Summary）中')
+    fs.appendFileSync(stepSummary, content)
+    printGreen('二维码已写入运行摘要页面（Summary）')
   } else {
-    // 本地运行降级：输出链接
+    // 本地运行：直接输出到终端
+    console.log(ascii)
     printMagenta('请复制此链接到浏览器打开，使用酷狗音乐 APP 扫码登录：')
     console.log(url)
   }
